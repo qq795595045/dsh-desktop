@@ -43,7 +43,8 @@
       {
         "provider": "github",
         "owner": "qq795595045",
-        "repo": "dsh-desktop"
+        "repo": "dsh-desktop",
+        "releaseType": "release"
       }
     ],
     "directories": {
