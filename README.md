@@ -71,6 +71,13 @@ npm run dist:all      # 全平台
 
 - 菜单「DSH → 检查 DSH 引擎更新…」:对比本地与 npm 上的 `@deepseek-ai/dsh` 版本。
 - 有新版则「更新并重启」,执行 `npm install -g @deepseek-ai/dsh@latest` 后自动重启服务。
+- **启动时自动检查**(菜单「DSH → 引擎自动更新方式」可切换):
+
+  | 模式 | 行为 |
+  | --- | --- |
+  | `启动时提示更新`(默认) | 启动静默对比版本,发现新版弹窗询问「更新并重启 / 稍后」;同版本被「稍后」跳过则不重复弹 |
+  | `全自动更新` | 发现新版直接 `npm install -g` + 重启服务,全程无感 |
+  | `关闭自动检查` | 不检查,仅手动菜单触发 |
 
   命令行等价操作:
 
@@ -174,6 +181,7 @@ dsh-desktop/
 ├── main.js                  # Electron 主进程:服务托管、窗口、菜单、更新流程
 ├── updater.js               # 无 Electron 依赖的更新核心(版本比较 / npm 操作 / PATH 增强)
 ├── autoupdate.js            # 应用外壳自动更新(electron-updater + GitHub Releases)
+├── settings.js              # 轻量设置读写(<userData>/settings.json)
 ├── mock-server.js           # 冒烟测试用 mock 服务器
 ├── assets/
 │   ├── icon.png             # 应用图标

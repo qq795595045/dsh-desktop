@@ -19,6 +19,7 @@ const http = require('node:http');
 
 const updater = require('./updater');
 const autoupdate = require('./autoupdate');
+const settings = require('./settings');
 
 const APP_NAME = 'DSH Desktop';
 const DEFAULT_URL = 'http://127.0.0.1:3080';
@@ -372,6 +373,67 @@ async function doUpdateAndRestart() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 引擎自动更新(启动时静默检查)
+// ---------------------------------------------------------------------------
+
+/**
+ * 启动后静默对比本地与 npm 上的 @deepseek-ai/dsh 版本。
+ * 按设置 engineAutoUpdate 决定行为:
+ *   'prompt' — 有新版则弹窗询问(默认);同版本被「稍后」跳过则不再重复弹。
+ *   'auto'   — 有新版则直接 npm install -g + 重启服务,全自动。
+ *   'off'    — 不检查。
+ */
+async function checkEngineUpdateOnStartup() {
+  if (isSmokeTest) return;
+  const mode = settings.get('engineAutoUpdate') || 'prompt';
+  if (mode === 'off') return;
+
+  const cur = updater.installedVersion();
+  if (!cur) return; // 未安装 dsh,交给正常启动流程处理
+
+  let latest;
+  try {
+    latest = await updater.latestVersion({ cacheDir: updater.npmCacheDir() });
+  } catch (e) {
+    log('engine update check failed:', e && e.message ? e.message : e);
+    return;
+  }
+  if (!latest || compareSafe(latest, cur) <= 0) return; // 无新版
+
+  log('engine update: local', cur, 'latest', latest, 'mode', mode);
+
+  if (mode === 'auto') {
+    await doUpdateAndRestart();
+    return;
+  }
+
+  // prompt 模式:跳过已「稍后」的同版本
+  const skip = settings.get('engineSkipVersion');
+  if (skip === latest) return;
+
+  const r = await dialog.showMessageBox({
+    type: 'info',
+    buttons: ['更新并重启', '稍后'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'DSH 引擎更新',
+    message: `检测到新引擎 v${latest}`,
+    detail: `当前版本 v${cur}\n\n官方已发布 @deepseek-ai/dsh v${latest},是否立即更新?`
+  });
+  if (r.response === 0) {
+    await doUpdateAndRestart();
+  } else {
+    settings.set('engineSkipVersion', latest);
+  }
+}
+
+function setEngineUpdateMode(mode) {
+  settings.set('engineAutoUpdate', mode);
+  log('engine update mode set to', mode);
+  buildMenu(); // 刷新菜单勾选状态
+}
+
 // 应用外壳更新入口:打包态走 electron-updater(或手动下载回退);开发模式走 git pull。
 function checkAppShellUpdate() {
   if (app.isPackaged) {
@@ -415,6 +477,7 @@ async function devGitPull() {
 
 function buildMenu() {
   const isMac = process.platform === 'darwin';
+  const engineMode = settings.get('engineAutoUpdate') || 'prompt';
   const template = [
     ...(isMac
       ? [{ label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }]
@@ -424,6 +487,15 @@ function buildMenu() {
       submenu: [
         { label: '检查 DSH 引擎更新…', click: () => checkDshUpdateInteractive() },
         { label: '更新 DSH 引擎并重启…', click: () => doUpdateAndRestart() },
+        { type: 'separator' },
+        {
+          label: '引擎自动更新方式',
+          submenu: [
+            { label: '启动时提示更新(默认)', type: 'radio', checked: engineMode === 'prompt', click: () => setEngineUpdateMode('prompt') },
+            { label: '全自动更新', type: 'radio', checked: engineMode === 'auto', click: () => setEngineUpdateMode('auto') },
+            { label: '关闭自动检查', type: 'radio', checked: engineMode === 'off', click: () => setEngineUpdateMode('off') }
+          ]
+        },
         { type: 'separator' },
         { label: '重启服务', accelerator: 'CmdOrCtrl+Shift+R', click: async () => { await restartServer(); } },
         { type: 'separator' },
@@ -501,6 +573,7 @@ if (!gotLock) {
 
     autoupdate.init(log);
     autoupdate.startupCheck();
+    checkEngineUpdateOnStartup();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

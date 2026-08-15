@@ -36,6 +36,7 @@
       "main.js",
       "updater.js",
       "autoupdate.js",
+      "settings.js",
       "mock-server.js",
       "assets/**/*"
     ],
