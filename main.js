@@ -26,6 +26,22 @@ const DEFAULT_URL = 'http://127.0.0.1:3080';
 const URL_RE = /dsh web:\s+(https?:\/\/\S+)/;
 const BOOT_TIMEOUT_MS = 30000;
 
+// macOS 隐藏原生标题栏后,交通灯按钮浮在内容上方,需要给内容补出顶部留白。
+// 顶部留白高度(px):主窗口与更新窗口共用,统一留白节奏。
+const MAC_TRAFFIC_LIGHT_INSET_PX = 56;
+
+// 主窗口/更新窗口共用的 macOS 标题栏选项:隐藏标题栏并定位交通灯按钮。
+const MAC_TITLEBAR_OPTIONS = process.platform === 'darwin' ? {
+  titleBarStyle: 'hiddenInset',
+  trafficLightPosition: { x: 16, y: 15 }
+} : {};
+
+// 主窗口:给应用根容器补出顶部留白,并用与应用一致的背景色填充。
+const MAC_ROOT_INSET_CSS = `[data-slot="root"]{padding-top:${MAC_TRAFFIC_LIGHT_INSET_PX}px;box-sizing:border-box;background:var(--dsw-alias-bg-base,#0f172a)}`;
+
+// 更新窗口:给 body 补出同样的顶部留白。
+const MAC_BODY_INSET_CSS = `body{padding-top:${MAC_TRAFFIC_LIGHT_INSET_PX}px}`;
+
 const isSmokeTest = process.argv.includes('--smoke-test');
 const isMock = process.env.DSH_DESKTOP_MOCK === '1';
 
@@ -200,12 +216,22 @@ function createWindow() {
     title: APP_NAME,
     backgroundColor: '#0f172a',
     show: false,
+    // macOS:隐藏原生标题栏,去掉标题栏与内容之间的分隔线,使整窗成为一个整体;
+    // 交通灯按钮浮在内容上方。
+    ...MAC_TITLEBAR_OPTIONS,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
     }
   });
+
+  // macOS 隐藏标题栏后,每次页面加载完成都补注顶部留白样式。
+  if (process.platform === 'darwin') {
+    mainWindow.webContents.on('did-finish-load', () => {
+      mainWindow.webContents.insertCSS(MAC_ROOT_INSET_CSS).catch(() => { /* ignore */ });
+    });
+  }
 
   // 服务已在运行则直接加载,否则先显示启动过渡页
   if (serverUrl) {
@@ -277,6 +303,8 @@ function showProgress(title) {
     title: title || `${APP_NAME} —— 更新`,
     backgroundColor: '#0f172a',
     show: false,
+    // 与主窗口一致:macOS 下隐藏标题栏,统一整窗观感。
+    ...MAC_TITLEBAR_OPTIONS,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -289,6 +317,9 @@ function showProgress(title) {
   let ready = false;
   let queue = [];
   win.webContents.once('did-finish-load', () => {
+    if (process.platform === 'darwin') {
+      win.webContents.insertCSS(MAC_BODY_INSET_CSS).catch(() => { /* ignore */ });
+    }
     ready = true;
     for (const line of queue) appendNow(line);
     queue = [];
@@ -498,6 +529,21 @@ function buildMenu() {
     ...(isMac
       ? [{ label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }]
       : []),
+    {
+      // macOS 下 Cmd+C/V/X/A 等快捷键依赖「编辑」菜单的 role 项,缺了就无法粘贴
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'pasteAndMatchStyle', label: '粘贴并匹配样式' },
+        { role: 'delete', label: '删除' },
+        { role: 'selectAll', label: '全选' }
+      ]
+    },
     {
       label: 'DSH',
       submenu: [
