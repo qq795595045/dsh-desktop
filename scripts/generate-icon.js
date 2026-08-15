@@ -2,8 +2,7 @@
 
 /**
  * 生成应用图标 assets/icon.png(1024x1024 RGBA)。
- * 纯 Node 实现(仅依赖内置 zlib),无任何第三方依赖:
- * 深色圆角底 + 白色对话气泡 + 三个圆点。
+ * 纯 Node 实现(仅依赖内置 zlib):画一只 DeepSeek 风格的蓝色鲸鱼。
  */
 
 const zlib = require('node:zlib');
@@ -12,7 +11,7 @@ const path = require('node:path');
 
 const SIZE = 1024;
 
-// ---- 颜色工具 -------------------------------------------------------------
+// ---- 基础工具 -------------------------------------------------------------
 
 function lerp(a, b, t) { return Math.round(a + (b - a) * t); }
 
@@ -20,25 +19,47 @@ function gradient(c0, c1) {
   return (t) => [lerp(c0[0], c1[0], t), lerp(c0[1], c1[1], t), lerp(c0[2], c1[2], t)];
 }
 
-// ---- 形状测试 -------------------------------------------------------------
-
-function inRoundedRect(x, y, cx, cy, w, h, r) {
-  const x0 = cx - w / 2, x1 = cx + w / 2;
-  const y0 = cy - h / 2, y1 = cy + h / 2;
-  if (x < x0 || x > x1 || y < y0 || y > y1) return false;
-  const nx = Math.max(x0 + r - x, 0, x - (x1 - r));
-  const ny = Math.max(y0 + r - y, 0, y - (y1 - r));
-  return nx * nx + ny * ny <= r * r;
-}
-
 function inCircle(x, y, cx, cy, r) {
   const dx = x - cx, dy = y - cy;
   return dx * dx + dy * dy <= r * r;
 }
 
-// ---- 绘制 -------------------------------------------------------------
+function inEllipse(x, y, cx, cy, rx, ry) {
+  const dx = (x - cx) / rx, dy = (y - cy) / ry;
+  return dx * dx + dy * dy <= 1;
+}
 
-const bg = gradient([15, 23, 42], [30, 41, 59]);   // #0f172a -> #1e293b
+function inRotEllipse(x, y, cx, cy, rx, ry, angleDeg) {
+  const a = angleDeg * Math.PI / 180;
+  const cos = Math.cos(a), sin = Math.sin(a);
+  const dx = x - cx, dy = y - cy;
+  const X = cos * dx + sin * dy;
+  const Y = -sin * dx + cos * dy;
+  return (X * X) / (rx * rx) + (Y * Y) / (ry * ry) <= 1;
+}
+
+// ---- 鲸鱼形状(头部朝左,尾巴朝右) -----------------------------------------
+
+function whaleShape(x, y) {
+  // 前段身体(头部更圆润)
+  if (inEllipse(x, y, 400, 555, 230, 195)) return true;
+  // 后段身体(略窄,向尾部收拢)
+  if (inEllipse(x, y, 640, 555, 225, 165)) return true;
+  // 尾鳍(上下两瓣,中间留 V 形缺口)
+  if (inRotEllipse(x, y, 850, 425, 105, 50, -28)) return true;
+  if (inRotEllipse(x, y, 850, 685, 105, 50, 28)) return true;
+  // 背鳍(背部)
+  if (inRotEllipse(x, y, 600, 385, 65, 30, -35)) return true;
+  // 胸鳍(腹部)
+  if (inRotEllipse(x, y, 430, 715, 100, 40, 45)) return true;
+  return false;
+}
+
+// ---- 绘制 -----------------------------------------------------------------
+
+const bg = gradient([255, 255, 255], [232, 238, 255]);   // 白 → 极淡蓝
+const whaleGrad = gradient([93, 124, 250], [59, 91, 219]); // 深蓝鲸鱼(#5D7CFA → #3B5BDB)
+
 const px = Buffer.alloc(SIZE * SIZE * 4);
 
 for (let y = 0; y < SIZE; y++) {
@@ -50,41 +71,27 @@ for (let y = 0; y < SIZE; y++) {
   }
 }
 
-const cx = SIZE / 2;
-const cy = SIZE / 2;
-
-// 白色对话气泡(带小尾巴)
-const bubble = (x, y) => {
-  const inBody = inRoundedRect(x, y, cx, cy - 40, 560, 420, 96);
-  if (inBody) return true;
-  // 尾巴:底部左下的三角形(用圆近似)
-  const tailCx = cx - 160, tailCy = cy + 180;
-  return inCircle(x, y, tailCx, tailCy, 70) && (y - tailCy) - (x - tailCx) * 0.6 < 20;
-};
-
+// 鲸鱼主体(带轻微上下渐变)
 for (let y = 0; y < SIZE; y++) {
+  const t = y / (SIZE - 1);
+  const [wr, wg, wb] = whaleGrad(t);
   for (let x = 0; x < SIZE; x++) {
-    if (bubble(x, y)) {
+    if (whaleShape(x, y)) {
       const i = (y * SIZE + x) * 4;
-      px[i] = 255; px[i + 1] = 255; px[i + 2] = 255; px[i + 3] = 255;
+      px[i] = wr; px[i + 1] = wg; px[i + 2] = wb; px[i + 3] = 255;
     }
   }
 }
 
-// 三个圆点
-const dotColor = [15, 23, 42];
-const dots = [
-  [cx - 150, cy - 10],
-  [cx, cy - 10],
-  [cx + 150, cy - 10]
-];
-for (const [dx, dy] of dots) {
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
-      if (inCircle(x, y, dx, dy, 42)) {
-        const i = (y * SIZE + x) * 4;
-        px[i] = dotColor[0]; px[i + 1] = dotColor[1]; px[i + 2] = dotColor[2]; px[i + 3] = 255;
-      }
+// 眼睛:白色眼白 + 深色瞳孔
+for (let y = 0; y < SIZE; y++) {
+  for (let x = 0; x < SIZE; x++) {
+    if (inCircle(x, y, 300, 520, 26)) {
+      const i = (y * SIZE + x) * 4;
+      px[i] = 255; px[i + 1] = 255; px[i + 2] = 255; px[i + 3] = 255;
+    } else if (inCircle(x, y, 292, 520, 12)) {
+      const i = (y * SIZE + x) * 4;
+      px[i] = 20; px[i + 1] = 28; px[i + 2] = 55; px[i + 3] = 255;
     }
   }
 }
@@ -117,19 +124,14 @@ function chunk(type, data) {
 }
 
 const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-
 const ihdr = Buffer.alloc(13);
 ihdr.writeUInt32BE(SIZE, 0);
 ihdr.writeUInt32BE(SIZE, 4);
-ihdr[8] = 8;  // bit depth
-ihdr[9] = 6;  // color type: RGBA
-ihdr[10] = 0; // compression
-ihdr[11] = 0; // filter
-ihdr[12] = 0; // interlace
+ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
 
 const raw = Buffer.alloc((SIZE * 4 + 1) * SIZE);
 for (let y = 0; y < SIZE; y++) {
-  raw[y * (SIZE * 4 + 1)] = 0; // filter: none
+  raw[y * (SIZE * 4 + 1)] = 0;
   px.copy(raw, y * (SIZE * 4 + 1) + 1, y * SIZE * 4, (y + 1) * SIZE * 4);
 }
 const idat = zlib.deflateSync(raw, { level: 9 });
@@ -144,4 +146,4 @@ const png = Buffer.concat([
 const out = path.join(__dirname, '..', 'assets', 'icon.png');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, png);
-console.log(`已生成图标: ${out} (${png.length} 字节)`);
+console.log(`已生成鲸鱼图标: ${out} (${png.length} 字节)`);
