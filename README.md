@@ -3,6 +3,19 @@
 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Web 界面(`dsh web`)
 封装为原生桌面应用:以 Electron 外壳托管 `dsh web` 服务,并提供内置的引擎更新与自更新能力。
 
+[![GitHub release](https://img.shields.io/github/v/release/qq795595045/dsh-desktop)](https://github.com/qq795595045/dsh-desktop/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/qq795595045/dsh-desktop/total)](https://github.com/qq795595045/dsh-desktop/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## 安装(普通用户)
+
+1. 到 [Releases](https://github.com/qq795595045/dsh-desktop/releases/latest) 下载 `DSH-Desktop-*-arm64.dmg`(或 `.zip`)
+2. 双击 `.dmg` 后把 `DSH Desktop` 拖进「应用程序」
+3. 首次打开:右键 →「打开」(未签名),或执行 `xattr -cr "DSH Desktop.app"`
+4. 需已安装 DeepSeek Harness CLI(见下方「环境要求」)
+
+> 已安装用户:应用启动时会自动检查更新(菜单「帮助 → 检查应用外壳更新…」);引擎更新在菜单「DSH → 检查 DSH 引擎更新…」。
+
 ## 功能
 
 - **原生桌面窗口**:启动即拉起 `dsh web`(默认让系统分配空闲端口),窗口加载本地 GUI。
@@ -83,6 +96,19 @@ npm run dist:all      # 全平台
 
 **发布一个新版本(让所有用户自动升级):**
 
+推荐走 CI(GitHub Actions):本地只需提升版本号并打 tag,推送后自动构建发布。
+
+```bash
+npm version patch          # 自动改版本号 + git commit + 打 tag vX.Y.Z
+git push --follow-tags     # 推送后 CI 自动构建并发布 Release
+```
+
+CI 工作流见 [`.github/workflows/release.yml`](.github/workflows/release.yml),触发条件是
+推送 `v*` 标签(也可在 Actions 页面手动 `workflow_dispatch`)。
+
+<details>
+<summary>本地手动发版(可选,需 GH_TOKEN)</summary>
+
 ```bash
 # 1) 首次:把 package.json 里两处占位符改成你的仓库
 #    - "repository".url
@@ -90,7 +116,7 @@ npm run dist:all      # 全平台
 
 # 2) 提升版本号并发布
 export GH_TOKEN=<你的 GitHub 令牌,需 repo 权限>
-npm version patch      # 自动改版本号并 git tag
+npm version patch
 npm run release        # 构建 + 上传 GitHub Release + 生成更新源
 ```
 
@@ -98,7 +124,11 @@ npm run release        # 构建 + 上传 GitHub Release + 生成更新源
 打包 `.dmg`/`.zip` → 上传到 `https://github.com/<owner>/<repo>/releases` → 生成
 `latest-mac.yml` 更新清单。已装用户下次启动即自动检测并下载。
 
+</details>
+
 **macOS 签名 + 公证(启用真正自动更新的最后一步):**
+
+本地发版:
 
 ```bash
 # 签名(Developer ID Application 证书)
@@ -113,8 +143,9 @@ export APPLE_TEAM_ID=XXXXXXXXXX
 npm run release
 ```
 
-`release.sh` 会自动识别:设置了 `CSC_LINK` 就签名;`APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID`
-三者齐全就追加 `-c.mac.notarize.teamId` 启用公证。什么都不设则构建未签名版本。
+CI 发版:在仓库 Secrets 里配置 `CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_ID` /
+`APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`,然后取消 `.github/workflows/release.yml`
+里对应注释并把构建命令换成 `npx electron-builder --mac --publish always -c.mac.notarize.teamId="$APPLE_TEAM_ID"`。
 
 ### 自动更新判定逻辑
 
