@@ -168,11 +168,22 @@ function killServer() {
   const child = serverProcess;
   if (!child) return Promise.resolve();
   return new Promise((resolve) => {
-    const timer = setTimeout(() => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(killTimer);
+      clearTimeout(forceTimer);
+      resolve();
+    };
+    // 3s 后仍未退出则强杀
+    const killTimer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
     }, 3000);
-    child.once('exit', () => { clearTimeout(timer); resolve(); });
-    try { child.kill('SIGTERM'); } catch (_) { /* ignore */ }
+    // 兜底:无论如何 6s 内结束,避免卡住退出流程
+    const forceTimer = setTimeout(finish, 6000);
+    child.once('exit', finish);
+    try { child.kill('SIGTERM'); } catch (_) { finish(); }
   });
 }
 
@@ -196,7 +207,12 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'assets', 'loading.html'));
+  // 服务已在运行则直接加载,否则先显示启动过渡页
+  if (serverUrl) {
+    mainWindow.loadURL(serverUrl);
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'assets', 'loading.html'));
+  }
 
   mainWindow.once('ready-to-show', () => {
     if (!isSmokeTest) mainWindow.show();
@@ -237,7 +253,7 @@ async function onServerUrlResolved(url) {
   }
   if (isSmokeTest) {
     console.log(`SMOKE_OK ${url}`);
-    app.exit(0);
+    killServer().finally(() => app.exit(0));
     return;
   }
   log('loading', url);
@@ -556,6 +572,8 @@ if (!gotLock) {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
+    } else {
+      createWindow();
     }
   });
 
@@ -581,13 +599,15 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    // 关窗即退出(包括 macOS):单窗口工具类应用,关窗即视为退出,方便下次重新打开
+    app.quit();
   });
 
-  app.on('before-quit', async (e) => {
+  app.on('before-quit', (e) => {
     if (isQuitting) return;
+    e.preventDefault();
     isQuitting = true;
-    // 保证子进程被回收
-    await killServer();
+    // 先回收 dsh 子进程,再真正退出,避免残留孤儿进程
+    killServer().finally(() => app.exit(0));
   });
 }
