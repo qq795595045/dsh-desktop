@@ -5,3 +5,6 @@ dist/
 .electron-cache/
 *.log
 .DS_Store
+
+# electron-builder / asar 补丁产物
+.asar-patch/
