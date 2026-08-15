@@ -69,20 +69,53 @@ npm run dist:all      # 全平台
 > 引擎与所有 bundle 都随 `@deepseek-ai/dsh` 包分发(profile 依赖为空),因此
 > 更新 CLI 即完成引擎全量更新,无需额外操作。
 
-### 2. DSH Desktop 外壳
+### 2. DSH Desktop 外壳(自动更新)
 
-- **开发模式(源码 checkout)**:菜单「帮助 → 更新应用外壳」执行
-  `scripts/update-app.sh`(`git pull --ff-only && npm install`)。首次需先建立 git 仓库并配置远程:
+外壳通过 [electron-updater](https://www.electron.build/auto-update) + GitHub Releases 实现自动更新:
 
-  ```bash
-  git init
-  git remote add origin <你的仓库地址>
-  git add -A && git commit -m "DSH Desktop" && git push -u origin main
-  ```
+- **打包版**:启动时静默检查新版本,后台下载,完成后提示「重启安装」。
+  菜单「帮助 → 检查应用外壳更新…」可随时手动触发。
+- **未签名 / 开发模式**:自动退化为「手动下载」——弹窗引导打开 GitHub Releases 下载页;
+  开发模式(源码 checkout)则走 `scripts/update-app.sh`(`git pull + npm install`)。
 
-- **打包版**:下载最新 `.zip`/`.dmg` 覆盖安装即可(菜单内会给出提示)。
-  如需自动更新,可在后续接入 [electron-updater](https://www.electron.build/auto-update)
-  并配置发布源(如 GitHub Releases)。
+> ⚠️ macOS 上自动更新要求应用已用 Apple Developer ID 签名并公证。未签名时
+> 应用会自动退化为手动下载,不影响其他功能;Windows(NSIS)/Linux(AppImage)可免签名自动更新。
+
+**发布一个新版本(让所有用户自动升级):**
+
+```bash
+# 1) 首次:把 package.json 里两处占位符改成你的仓库
+#    - "repository".url
+#    - build.publish[0].owner / repo
+
+# 2) 提升版本号并发布
+export GH_TOKEN=<你的 GitHub 令牌,需 repo 权限>
+npm version patch      # 自动改版本号并 git tag
+npm run release        # 构建 + 上传 GitHub Release + 生成更新源
+```
+
+`npm run release` 会执行 `electron-builder --mac --publish always`,自动:
+打包 `.dmg`/`.zip` → 上传到 `https://github.com/<owner>/<repo>/releases` → 生成
+`latest-mac.yml` 更新清单。已装用户下次启动即自动检测并下载。
+
+**macOS 签名(启用真正自动更新的最后一步):**
+
+```bash
+export CSC_LINK=/path/to/DeveloperIDApplication.p12
+export CSC_KEY_PASSWORD=xxx
+# 并在 package.json 的 build.mac 中启用 notarize(见 electron-builder 文档)
+npm run release
+```
+
+### 自动更新判定逻辑
+
+| 条件 | 结果 |
+| --- | --- |
+| 打包态 + 已配 GitHub 源 + macOS 已签名 | ✅ electron-updater 自动更新 |
+| 打包态 + 已配 GitHub 源 + Windows/Linux | ✅ 自动更新(NSIS/AppImage) |
+| 未签名 macOS / 开发模式 / 未配源 | ⬇️ 退化为手动下载 / git pull |
+
+可用环境变量 `DSH_DESKTOP_DISABLE_AUTOUPDATE=1` 强制禁用自动更新(回到手动下载)。
 
 ## 配置项(环境变量)
 
@@ -100,6 +133,7 @@ npm run dist:all      # 全平台
 dsh-desktop/
 ├── main.js                  # Electron 主进程:服务托管、窗口、菜单、更新流程
 ├── updater.js               # 无 Electron 依赖的更新核心(版本比较 / npm 操作 / PATH 增强)
+├── autoupdate.js            # 应用外壳自动更新(electron-updater + GitHub Releases)
 ├── mock-server.js           # 冒烟测试用 mock 服务器
 ├── assets/
 │   ├── icon.png             # 应用图标
@@ -109,7 +143,8 @@ dsh-desktop/
     ├── generate-icon.js     # 生成图标(纯 Node,无第三方依赖)
     ├── check-dsh.js         # 命令行检查引擎更新
     ├── update-dsh.js        # 命令行更新引擎
-    └── update-app.sh        # 开发模式自更新脚本
+    ├── update-app.sh        # 开发模式自更新脚本
+    └── release.sh           # 发布到 GitHub Releases(自动更新用)
 ```
 
 ## 说明

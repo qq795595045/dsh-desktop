@@ -18,6 +18,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 
 const updater = require('./updater');
+const autoupdate = require('./autoupdate');
 
 const APP_NAME = 'DSH Desktop';
 const DEFAULT_URL = 'http://127.0.0.1:3080';
@@ -371,22 +372,16 @@ async function doUpdateAndRestart() {
   }
 }
 
-async function updateAppShell() {
+// 应用外壳更新入口:打包态走 electron-updater(或手动下载回退);开发模式走 git pull。
+function checkAppShellUpdate() {
   if (app.isPackaged) {
-    await dialog.showMessageBox({
-      type: 'info',
-      title: '更新应用外壳',
-      message: '应用外壳(DSH Desktop 本身)',
-      detail: [
-        '已安装版本: v' + app.getVersion(),
-        '',
-        'DSH Desktop 外壳的更新方式:下载最新版安装包(.zip/.dmg)替换即可。',
-        '',
-        'DSH 引擎可随时通过菜单「DSH → 检查 DSH 引擎更新」在线更新,无需重装应用。'
-      ].join('\n')
-    });
+    autoupdate.checkInteractive();
     return;
   }
+  devGitPull();
+}
+
+async function devGitPull() {
   const script = path.join(__dirname, 'scripts', 'update-app.sh');
   if (!fs.existsSync(script)) {
     dialog.showErrorBox(`${APP_NAME} —— 更新应用外壳`, '未找到 scripts/update-app.sh');
@@ -405,7 +400,7 @@ async function updateAppShell() {
 
   const progress = showProgress('正在更新应用外壳…');
   progress.append('==> scripts/update-app.sh\n\n');
-  const child = spawn('bash', [script], { env: { ...process.env } });
+  const child = spawn('bash', [script], { env: updater.augmentedEnv() });
   child.stdout.on('data', (d) => progress.append(String(d)));
   child.stderr.on('data', (d) => progress.append(String(d)));
   child.on('close', (code) => {
@@ -452,7 +447,7 @@ function buildMenu() {
     {
       label: '帮助',
       submenu: [
-        { label: '更新应用外壳…', click: () => updateAppShell() },
+        { label: '检查应用外壳更新…', click: () => checkAppShellUpdate() },
         { type: 'separator' },
         { label: '关于', click: () => showAbout() }
       ]
@@ -503,6 +498,9 @@ if (!gotLock) {
     createWindow();
     buildMenu();
     spawnServer();
+
+    autoupdate.init(log);
+    autoupdate.startupCheck();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

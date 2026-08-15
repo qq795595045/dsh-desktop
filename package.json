@@ -7,6 +7,10 @@
   "private": true,
   "license": "MIT",
   "author": "DSH Desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_GITHUB_USERNAME_OR_ORG/dsh-desktop.git"
+  },
   "scripts": {
     "start": "electron .",
     "smoke": "electron . --smoke-test",
@@ -16,7 +20,8 @@
     "update:app": "bash scripts/update-app.sh",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --mac",
-    "dist:all": "electron-builder --mac --linux --win"
+    "dist:all": "electron-builder --mac --linux --win",
+    "release": "bash scripts/release.sh"
   },
   "devDependencies": {
     "electron": "^43.4.0",
@@ -30,8 +35,16 @@
     "files": [
       "main.js",
       "updater.js",
+      "autoupdate.js",
       "mock-server.js",
       "assets/**/*"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YOUR_GITHUB_USERNAME_OR_ORG",
+        "repo": "dsh-desktop"
+      }
     ],
     "directories": {
       "output": "release"
@@ -42,7 +55,8 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "notarize": false
     },
     "dmg": {
       "title": "DSH Desktop"
@@ -61,5 +75,8 @@
         "nsis"
       ]
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }
