@@ -98,14 +98,23 @@ npm run release        # 构建 + 上传 GitHub Release + 生成更新源
 打包 `.dmg`/`.zip` → 上传到 `https://github.com/<owner>/<repo>/releases` → 生成
 `latest-mac.yml` 更新清单。已装用户下次启动即自动检测并下载。
 
-**macOS 签名(启用真正自动更新的最后一步):**
+**macOS 签名 + 公证(启用真正自动更新的最后一步):**
 
 ```bash
+# 签名(Developer ID Application 证书)
 export CSC_LINK=/path/to/DeveloperIDApplication.p12
 export CSC_KEY_PASSWORD=xxx
-# 并在 package.json 的 build.mac 中启用 notarize(见 electron-builder 文档)
+
+# 公证(Apple 账号 + App 专用密码 + Team ID)
+export APPLE_ID=you@example.com
+export APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
+export APPLE_TEAM_ID=XXXXXXXXXX
+
 npm run release
 ```
+
+`release.sh` 会自动识别:设置了 `CSC_LINK` 就签名;`APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID`
+三者齐全就追加 `-c.mac.notarize.teamId` 启用公证。什么都不设则构建未签名版本。
 
 ### 自动更新判定逻辑
 
