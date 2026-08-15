@@ -1,0 +1,65 @@
+{
+  "name": "dsh-desktop",
+  "productName": "DSH Desktop",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 桌面版:将 dsh web 封装为原生桌面应用,内置引擎更新与自更新能力",
+  "main": "main.js",
+  "private": true,
+  "license": "MIT",
+  "author": "DSH Desktop",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke-test",
+    "icon": "node scripts/generate-icon.js",
+    "check:dsh": "node scripts/check-dsh.js",
+    "update:dsh": "node scripts/update-dsh.js",
+    "update:app": "bash scripts/update-app.sh",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --mac",
+    "dist:all": "electron-builder --mac --linux --win"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.deepseek.dsh.desktop",
+    "productName": "DSH Desktop",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "main.js",
+      "updater.js",
+      "mock-server.js",
+      "assets/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "title": "DSH Desktop"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    },
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}
