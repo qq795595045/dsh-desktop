@@ -54,6 +54,6 @@ fi
 echo "==> 发布 ${OWNER}/${REPO} v${VERSION}"
 
 ELECTRON_BUILDER_CACHE="${ELECTRON_BUILDER_CACHE:-$HOME/.cache/electron-builder}" \
-  npx electron-builder --mac --publish always "${EXTRA_ARGS[@]}"
+  npx electron-builder --mac --publish always ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 
 echo "==> 完成: https://github.com/${OWNER}/${REPO}/releases/tag/v${VERSION}"
